@@ -22,8 +22,60 @@
       link.addEventListener('click', function () {
         header.classList.remove('menu-open');
         toggle.setAttribute('aria-expanded', 'false');
+        document.body.classList.remove('menu-locked');
       });
     });
+    toggle.addEventListener('click', function () {
+      document.body.classList.toggle('menu-locked', header.classList.contains('menu-open'));
+    });
+  }
+
+  // Section links: scroll without putting a hash in the URL.
+  // Links look like <a href="./" data-section="pricing">. If the section is on another page,
+  // the target is remembered and applied after that page loads.
+  var PENDING_KEY = 'cw-scroll-to';
+
+  function goToSection(id, smooth) {
+    var el = document.getElementById(id);
+    if (!el) return false;
+    el.scrollIntoView({ behavior: smooth && !reduceMotion ? 'smooth' : 'auto', block: 'start' });
+    if (id === 'main') el.focus({ preventScroll: true });
+    return true;
+  }
+
+  document.addEventListener('click', function (e) {
+    var link = e.target.closest('a[data-section]');
+    if (!link || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    var id = link.getAttribute('data-section');
+    var clean = function (p) { return p.replace(/index\.html$/, ''); };
+    var samePage = clean(new URL(link.href, location.href).pathname) === clean(location.pathname);
+    if (samePage && goToSection(id, true)) {
+      e.preventDefault();
+      return;
+    }
+    try { sessionStorage.setItem(PENDING_KEY, id); } catch (err) {}
+  });
+
+  function applyPendingSection() {
+    var id = null;
+    try {
+      id = sessionStorage.getItem(PENDING_KEY);
+      sessionStorage.removeItem(PENDING_KEY);
+    } catch (err) {}
+    if (!id && location.hash) id = location.hash.slice(1);
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    if (id) requestAnimationFrame(function () { goToSection(id, false); });
+  }
+  if (document.readyState === 'complete') applyPendingSection();
+  else window.addEventListener('load', applyPendingSection);
+
+  // Mobile call bar: step aside while the lead form is on screen
+  var mobileBar = document.querySelector('.mobile-bar');
+  var quote = document.getElementById('quote');
+  if (mobileBar && quote && 'IntersectionObserver' in window) {
+    new IntersectionObserver(function (entries) {
+      mobileBar.classList.toggle('is-hidden', entries[0].isIntersecting);
+    }, { threshold: 0.15 }).observe(quote);
   }
 
   // Hero video: pause for reduced motion, keep playing otherwise
@@ -92,7 +144,7 @@
   var tocLinks = document.querySelectorAll('.toc a');
   if (tocLinks.length && 'IntersectionObserver' in window) {
     var map = {};
-    tocLinks.forEach(function (a) { map[a.getAttribute('href').slice(1)] = a; });
+    tocLinks.forEach(function (a) { map[a.getAttribute('data-section')] = a; });
     var spy = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
         if (entry.isIntersecting) {
